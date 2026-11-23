@@ -1,11 +1,13 @@
 # Rainbow Canvas
 
-An interactive grid of randomly colored tiles, written in C++ with SFML 3. Pan across the canvas and zoom in to explore the generated colors.
+A procedural canvas of randomly colored chunks, written in C++ with SFML 3. Pan across the canvas and zoom in to explore the generated colors.
 
 ## Features
 
-- A **100 × 100 grid** containing 10,000 colored rectangles.
-- Random RGB colors generated when the application starts.
+- Chunks generated on demand around the current camera view.
+- A background worker thread for generating colored tiles.
+- A distance-prioritized work queue and removal of chunks far from the camera.
+- Random RGB colors assigned as chunks are created.
 - Camera movement with the right mouse button.
 - Mouse-wheel zoom through `sf::View`.
 - A borderless window sized to the desktop.
@@ -21,7 +23,7 @@ This version is a canvas navigation experiment. It does not yet provide painting
 | Scroll **down** | Zoom out |
 | **Esc** | Close the application |
 
-Colors are regenerated on each launch. The initial camera view is deliberately small relative to the full grid; scroll down to see more tiles.
+Tiles are generated as you explore. Unloaded tiles are generated again with new colors when revisited. Scroll down to see a larger area; the current code limits zooming out based on the view width.
 
 ## Build
 
@@ -40,7 +42,7 @@ For Linux system packages, see the dependency installation step in [.github/work
 
 ## Run
 
-The program loads `../resources/images.jpg` during initialization, even though drawing that background is currently disabled. Keep the resource file and launch with **`build/bin` as the working directory**.
+The final version no longer loads a background texture. The executable produced by the Ninja build is in **`build/bin`**.
 
 Linux/macOS:
 
@@ -56,24 +58,26 @@ Set-Location build/bin
 .\main.exe
 ```
 
-CMake copies the assets to `build/resources`. If you launch through an IDE, set its working directory to `build/bin` as well.
+The inherited CMake script still copies the resource directory, but canvas rendering does not depend on that image.
 
 ## How it works
 
-`Project::initChunks()` creates the tile grid and assigns each tile a random color. Mouse input moves or scales an `sf::View`; the render loop draws the rectangles through that view.
+`checkArea()` identifies missing chunks around the view and sorts queued positions by distance from the camera. A worker running `createChunk()` generates colored rectangles. The render loop draws loaded chunks, and distant chunks are removed. Mouse input moves or scales an `sf::View`.
 
 | File | Responsibility |
 | --- | --- |
 | [src/main.cpp](src/main.cpp) | Entry point |
-| [src/project.cpp](src/project.cpp) | Grid generation, camera controls, and rendering |
-| [headers/project.h](headers/project.h) | Canvas state and `Chunk` structure |
+| [src/project.cpp](src/project.cpp) | Chunk scheduling, worker loop, camera controls, and rendering |
+| [headers/project.h](headers/project.h) | Chunk keys, hash function, thread, and shared state |
 | [CMakeLists.txt](CMakeLists.txt) | Build configuration and SFML dependencies |
 
-Change `width`, `height`, and the tile-size argument to `initChunks()` in the constructor to experiment with different canvases.
+Change `chSize` in the constructor to experiment with tile dimensions. The loading and eviction radii are calculated in `checkArea()`.
 
 ## Current limitations
 
-All 10,000 tiles are drawn every frame; viewport culling is not implemented. Zoom is unrestricted, and dragging is not adjusted for the current zoom level. These are useful areas for further work alongside drawing tools and canvas persistence.
+This is a threading experiment, not a production streaming engine. The idle worker currently busy-waits, and access to the chunk map in `checkArea()` is not consistently protected by its mutex. Generated colors are not persisted, and panning is not scaled to the current zoom. Synchronization, an idle condition variable, and persistent tile data are useful next steps.
+
+The header uses `std::unordered_map` and `std::unordered_set` without explicitly including their headers. If a build reports those types as undeclared, add `<unordered_map>` and `<unordered_set>` to `headers/project.h`.
 
 ## License and credits
 

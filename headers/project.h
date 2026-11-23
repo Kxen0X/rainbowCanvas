@@ -5,13 +5,36 @@
 #include <SFML/System.hpp>
 #include <iostream>
 #include <random>
+#include <algorithm>
+#include <atomic>
+#include <mutex>
+#include <thread>
+#include <queue>
 
 
+struct ChunkPos {
+	int x, y;
+	bool operator==(const ChunkPos& other) const {
+		return other.x == this->x && other.y == this->y;
+	}
+};
+
+namespace std {
+	template <>
+	struct hash<ChunkPos> {
+		size_t operator()(const ChunkPos& p) const {
+			size_t h1 = hash<int>{}(p.x);
+			size_t h2 = hash<int>{}(p.y);
+			return h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2));
+		}
+	};
+}
 struct Chunk {
-	sf::Vector2f pos;
+	ChunkPos pos;
 	bool isLoaded;
 	sf::RectangleShape ch;
 };
+
 
 
 class Project {
@@ -24,20 +47,27 @@ public:
 	void run();
 private:
 	void eventUpdate();
-	void initChunks(int, int, int);
+	void createChunk(int);
+	void checkArea();
 	int height;
 	int width;
-
+	int chSize;
+	int finalRadius;
 	sf::RenderWindow* window;
 	sf::View* view;
 
 	sf::Vector2i lastMousePos;
 	bool isDrag = 0;
 
-	std::vector<Chunk> chunks;
+	std::unordered_map<ChunkPos, Chunk> chunks;
+	std::unordered_set<ChunkPos> pendingChunks;
+	std::mutex pendingMutex;
+	std::mutex chunkMutex;
 
+	std::vector<ChunkPos> queue;
+	std::mutex queueMutex;
 
-	sf::Texture bgT;
-	sf::Sprite* bgS;
+	std::thread createChunks;
+	std::atomic<bool> isRunning;
 
 };
